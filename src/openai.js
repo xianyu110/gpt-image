@@ -1,7 +1,7 @@
 // OpenAI API 调用函数
 
 // 图像生成函数
-export const generateImage = async (apiKey, prompt, baseURL = 'https://api.openai.com/v1', quality = 'medium', size = '1024x1024') => {
+export const generateImage = async (apiKey, prompt, baseURL = 'https://api.maynor1024.live/v1', quality = 'medium', size = '1024x1024') => {
   try {
     const response = await fetch(`${baseURL}/images/generations`, {
       method: 'POST',
@@ -33,7 +33,7 @@ export const generateImage = async (apiKey, prompt, baseURL = 'https://api.opena
 };
 
 // 图像编辑函数
-export const editImage = async (apiKey, image, prompt, baseURL = 'https://api.openai.com/v1', quality = 'medium', size = '1024x1024') => {
+export const editImage = async (apiKey, image, prompt, baseURL = 'https://api.maynor1024.live/v1', quality = 'medium', size = '1024x1024') => {
   try {
     // 创建FormData对象
     const formData = new FormData();

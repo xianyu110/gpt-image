@@ -16,7 +16,7 @@ const port = process.env.PORT || 3000;
 
 // API密钥和基础URL从环境变量中获取
 const OPENAI_API_KEY = process.env.VITE_OPENAI_API_KEY;
-const OPENAI_BASE_URL = process.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com/v1';
+const OPENAI_BASE_URL = process.env.VITE_OPENAI_BASE_URL || 'https://api.maynor1024.live/v1';
 // 每个用户的最大使用次数
 const MAX_USAGE_COUNT = process.env.MAX_USAGE_COUNT || 10;
 
@@ -354,5 +354,11 @@ module.exports = app;
 
 // 启动服务器
 app.listen(port, () => {
-  console.log(`服务器运行在 http://localhost:${port}`);
+  console.log(`服务器运行在端口 ${port}`);
+  console.log('环境变量:', {
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT,
+    VITE_OPENAI_API_KEY: process.env.VITE_OPENAI_API_KEY ? '已设置' : '未设置',
+    VITE_OPENAI_BASE_URL: process.env.VITE_OPENAI_BASE_URL || 'https://api.maynor1024.live/v1'
+  });
 }); 

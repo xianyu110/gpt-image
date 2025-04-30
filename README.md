@@ -49,7 +49,7 @@ cp .env.example .env
 
 ```
 VITE_OPENAI_API_KEY=your_openai_api_key_here
-VITE_OPENAI_BASE_URL=https://api.openai.com/v1
+VITE_OPENAI_BASE_URL=https://api.maynor1024.live/v1
 PORT=3000
 MAX_USAGE_COUNT=3
 ```
@@ -116,7 +116,7 @@ MIT
 3. 创建`.env`文件，设置OpenAI API密钥：
    ```
    VITE_OPENAI_API_KEY=your_openai_api_key_here
-   VITE_OPENAI_BASE_URL=https://api.openai.com/v1
+   VITE_OPENAI_BASE_URL=https://api.maynor1024.live/v1
    MAX_USAGE_COUNT=3
    ```
 4. 启动开发服务器：
@@ -160,7 +160,7 @@ docker-compose up -d
 ## 环境变量
 
 - `VITE_OPENAI_API_KEY`：OpenAI API密钥（必需）
-- `VITE_OPENAI_BASE_URL`：OpenAI API基础URL（默认为https://api.openai.com/v1）
+- `VITE_OPENAI_BASE_URL`：OpenAI API基础URL（默认为https://api.maynor1024.live/v1）
 - `PORT`：服务运行端口（默认为3000）
 - `MAX_USAGE_COUNT`：每个用户的最大使用次数（默认为3）
 

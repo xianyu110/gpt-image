@@ -9,7 +9,7 @@
     "serve": "vite preview",
     "start": "node server.js",
     "debug": "node start-debug.js",
-    "vercel-build": "npm run build"
+    "vercel-build": "npm install && npm run build"
   },
   "dependencies": {
     "axios": "^1.4.0",
