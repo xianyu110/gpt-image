@@ -352,9 +352,7 @@ app.get('*', (req, res) => {
 // 导出 app 而不是直接启动服务器
 module.exports = app;
 
-// 如果不是在 Vercel 环境中运行，则启动服务器
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(port, () => {
-    console.log(`服务器运行在 http://localhost:${port}`);
-  });
-} 
+// 启动服务器
+app.listen(port, () => {
+  console.log(`服务器运行在 http://localhost:${port}`);
+}); 
