@@ -39,33 +39,11 @@
             </button>
           </div>
         </div>
-        <div class="tabs">
-          <div 
-            class="tab" 
-            :class="{ active: activeTab === 'generate' }" 
-            @click="activeTab = 'generate'"
-          >
-            <span class="tab-icon">🖌️</span>
-            <span class="tab-text">画图</span>
-          </div>
-          <div 
-            class="tab" 
-            :class="{ active: activeTab === 'edit' }" 
-            @click="activeTab = 'edit'"
-          >
-            <span class="tab-icon">✏️</span>
-            <span class="tab-text">改图</span>
-          </div>
-        </div>
       </div>
     </header>
     
     <main class="main-content">
-      <router-view 
-        :api-endpoint="apiEndpoint"
-        v-if="activeTab === 'generate' && $route.path === '/' || 
-              activeTab === 'edit' && $route.path === '/edit'"
-      ></router-view>
+      <router-view :api-endpoint="apiEndpoint"></router-view>
     </main>
     
     <footer class="footer">
@@ -80,12 +58,10 @@ export default {
   data() {
     return {
       apiEndpoint: '/api',
-      activeTab: 'generate',
       selectedTheme: 'theme-purple'
     }
   },
   created() {
-    // 从本地存储中恢复上次选择的主题
     const savedTheme = localStorage.getItem('selectedTheme');
     if (savedTheme) {
       this.selectedTheme = savedTheme;
@@ -94,24 +70,7 @@ export default {
   methods: {
     changeTheme(theme) {
       this.selectedTheme = theme;
-      // 保存主题选择到本地存储
       localStorage.setItem('selectedTheme', theme);
-    }
-  },
-  watch: {
-    activeTab(newTab) {
-      if (newTab === 'generate' && this.$route.path !== '/') {
-        this.$router.push('/')
-      } else if (newTab === 'edit' && this.$route.path !== '/edit') {
-        this.$router.push('/edit')
-      }
-    },
-    $route(to) {
-      if (to.path === '/') {
-        this.activeTab = 'generate'
-      } else if (to.path === '/edit') {
-        this.activeTab = 'edit'
-      }
     }
   }
 }
@@ -292,39 +251,6 @@ body {
   background: linear-gradient(45deg, #8e2de2, #4a00e0);
 }
 
-.tabs {
-  display: flex;
-  gap: 1rem;
-}
-
-.tab {
-  display: flex;
-  align-items: center;
-  padding: 0.6rem 1.2rem;
-  cursor: pointer;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.8);
-  transition: all 0.3s;
-  border-radius: 8px;
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.tab:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-  color: white;
-}
-
-.tab.active {
-  background-color: white;
-  color: var(--primary-color);
-  font-weight: 600;
-}
-
-.tab-icon {
-  margin-right: 0.5rem;
-  font-size: 1.1rem;
-}
-
 .main-content {
   flex: 1;
   padding: 2rem;
@@ -428,10 +354,6 @@ body {
   
   .main-content {
     padding: 1.5rem 0;
-  }
-  
-  .tab {
-    padding: 0.5rem 1rem;
   }
   
   .title-wrapper {

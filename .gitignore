@@ -27,4 +27,8 @@ dist-ssr
 .env
 
 # 上传文件临时目录
-uploads/ 
+uploads/
+
+# New line for db.json
+coverage
+db.json 

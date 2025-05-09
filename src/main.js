@@ -5,8 +5,7 @@ import './style.css'
 
 // 路由配置
 const routes = [
-  { path: '/', component: () => import('./components/ImageGenerator.vue') },
-  { path: '/edit', component: () => import('./components/ImageEditor.vue') }
+  { path: '/', component: () => import('./components/DrawingBoard.vue') },
 ]
 
 const router = createRouter({

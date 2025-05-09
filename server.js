@@ -6,6 +6,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
 const FormData = require('form-data');
+const { v4: uuidv4 } = require('uuid');
 
 // 加载环境变量
 dotenv.config();
@@ -30,6 +31,30 @@ if (!OPENAI_API_KEY) {
 
 // 用户使用次数跟踪
 const userUsageMap = new Map();
+
+// --- Start: Database setup moved to async function ---
+let db; // Declare db variable here, assign later
+
+async function setupDatabase() {
+  try {
+    // Dynamically import lowdb modules
+    const { Low } = await import('lowdb');
+    const { JSONFile } = await import('lowdb/node');
+    
+    const adapter = new JSONFile('db.json');
+    const defaultData = { history: [] };
+    db = new Low(adapter, defaultData); // Assign to the outer scope db variable
+    
+    // Load the database
+    await db.read();
+    console.log('Database loaded successfully.');
+  } catch (error) {
+    console.error('Failed to initialize or load database:', error);
+    // Decide how to handle DB load failure. Exit or run without DB?
+    // For now, we'll log the error and continue, endpoints using db will fail.
+  }
+}
+// --- End: Database setup moved to async function ---
 
 // 获取用户IP
 const getClientIP = (req) => {
@@ -132,12 +157,22 @@ if (fs.existsSync(distPath)) {
   console.warn('警告: dist目录不存在，请先运行 npm run build');
 }
 
+// --- Start: API Endpoints ---
+// Ensure DB is checked within endpoints or after setup completion
+
 // 图片生成API
 app.post('/api/images/generations', async (req, res) => {
   console.log('收到图片生成请求');
+  if (!db) { // Check if db is initialized
+      console.error('Database not initialized. Cannot save history.');
+      // Optionally return an error or proceed without saving history
+      // return res.status(500).json({ error: { message: 'Database error' } });
+  }
   try {
-    const { prompt, quality, size } = req.body;
-    console.log('请求参数:', { prompt: prompt?.substring(0, 20) + '...', quality, size });
+    // Destructure n from req.body, default to 1, ensure it's a valid number
+    const { prompt, quality, size, n: requestedN } = req.body;
+    const n = Math.max(1, Math.min(parseInt(requestedN) || 1, 4)); // Clamp n between 1 and 4 (or API limit)
+    console.log('请求参数:', { prompt: prompt?.substring(0, 20) + '...', quality, size, n });
 
     if (!prompt) {
       console.error('错误: 提示词为空');
@@ -160,18 +195,61 @@ app.post('/api/images/generations', async (req, res) => {
       data: {
         model: "gpt-image-1",
         prompt,
-        n: 1,
+        n: n, // Pass validated n to OpenAI API
         quality: quality || 'medium',
         size: size || '1024x1024',
         response_format: "url"
       }
     });
 
+    // ---- Start: Modified History Saving for n > 1 ----
+    // Check if response data is an array (expected for n > 0)
+    if (response.data && response.data.data && Array.isArray(response.data.data)) {
+      const generatedData = response.data.data; // Array of { url, revised_prompt? }
+      console.log(`OpenAI API 成功返回 ${generatedData.length} 张图片数据`);
+      
+      if (db) { // Check if db is initialized
+         db.data.history = db.data.history || [];
+         let savedCount = 0;
+         // Save each successful generation as a separate history entry
+         for (const item of generatedData) {
+             if (item.url) { // Ensure item has a URL
+                const historyEntry = {
+                  id: uuidv4(),
+                  type: 'generate',
+                  prompt,
+                  quality: quality || 'medium',
+                  size: size || '1024x1024',
+                  imageUrl: item.url,
+                  revised_prompt: item.revised_prompt, // Store revised prompt if available
+                  status: 'success',
+                  timestamp: new Date().toISOString(),
+                  // userId: req.user ? req.user.id : getClientIP(req)
+                };
+                db.data.history.unshift(historyEntry); // Add to beginning
+                savedCount++;
+             } else {
+                 console.warn('API 返回的某个图片数据缺少 URL', item);
+             }
+         }
+         if (savedCount > 0) {
+            await db.write();
+            console.log(`${savedCount} 条图片生成成功历史记录已保存`);
+         }
+      } else {
+         console.warn('Database not available, history not saved.');
+      }
+    } else {
+       // This case might indicate an API error before generation or unexpected format
+       console.warn('OpenAI API响应数据格式不正确，无法保存历史记录', response.data);
+    }
+    // ---- End: Modified History Saving ----
+
     // 增加用户使用次数
     incrementUsageCount(req);
     
     console.log('OpenAI API响应成功');
-    res.json(response.data);
+    res.json(response.data); // Send the full response back (contains array data)
   } catch (error) {
     console.error('生成图片错误:');
     if (error.response) {
@@ -182,6 +260,37 @@ app.post('/api/images/generations', async (req, res) => {
     } else {
       console.error('错误信息:', error.message);
     }
+    
+    // ---- Start: Modified Error History Saving ----
+    if(db) { 
+       try {
+         const { prompt, quality, size, n: requestedN } = req.body;
+         const n = Math.max(1, Math.min(parseInt(requestedN) || 1, 4));
+         const historyEntry = {
+           id: uuidv4(),
+           type: 'generate',
+           prompt,
+           quality: quality || 'medium',
+           size: size || '1024x1024',
+           requestedCount: n, // Store requested number on failure
+           imageUrl: null, 
+           status: 'failed',
+           error: error.response?.data?.error?.message || '图像生成失败: ' + error.message,
+           timestamp: new Date().toISOString(),
+           // userId: req.user ? req.user.id : getClientIP(req)
+         };
+         
+         db.data.history = db.data.history || [];
+         db.data.history.unshift(historyEntry);
+         await db.write();
+         console.log(`图片生成失败历史记录已保存 (请求数量: ${n})`);
+       } catch (dbError) {
+         console.error('保存失败历史记录时出错:', dbError);
+       }
+    } else {
+        console.warn('Database not available, error history not saved.');
+    }
+    // ---- End: Modified Error History Saving ----
     
     res.status(error.response?.status || 500).json({
       error: {
@@ -210,6 +319,8 @@ app.post('/api/images/edits', (req, res) => {
     try {
       const { prompt, quality, size } = req.body;
       const imageFiles = req.files || [];
+      // Store original filenames for history
+      const originalFilenames = imageFiles.map(f => f.originalname).join(', ');
       
       console.log('请求参数:', { 
         prompt: prompt?.substring(0, 20) + '...', 
@@ -265,6 +376,36 @@ app.post('/api/images/edits', (req, res) => {
         }
       });
 
+      // ---- Start: Add edit success to history ----
+      let editedImageUrl = null;
+      if (response.data && response.data.data && response.data.data[0] && response.data.data[0].url) {
+         editedImageUrl = response.data.data[0].url;
+         if(db) { // Check if db is initialized
+            const historyEntry = {
+              id: uuidv4(),
+              type: 'edit', // Mark as edit history
+              prompt,
+              quality: quality || 'medium',
+              size: size || '1024x1024',
+              originalFilenames, // Save original filename(s)
+              imageUrl: editedImageUrl, // Edited image URL
+              status: 'success', 
+              timestamp: new Date().toISOString(),
+              // userId: req.user ? req.user.id : getClientIP(req)
+            };
+            
+            db.data.history = db.data.history || [];
+            db.data.history.unshift(historyEntry);
+            await db.write();
+            console.log('图片编辑成功历史记录已保存');
+         } else {
+            console.warn('Database not available, edit success history not saved.');
+         }
+      } else {
+         console.warn('OpenAI API响应数据格式不正确，无法从响应中提取编辑后的图片URL');
+      }
+      // ---- End: Add edit success to history ----
+
       // 处理完成后删除所有临时文件
       imageFiles.forEach(file => {
         fs.unlinkSync(file.path);
@@ -288,6 +429,39 @@ app.post('/api/images/edits', (req, res) => {
       } else {
         console.error('错误信息:', error.message);
       }
+      
+      // ---- Start: Add edit error to history ----
+       if(db) { // Check if db is initialized
+          try {
+            const { prompt, quality, size } = req.body;
+            const imageFiles = req.files || []; // Get files again or pass from outer scope if needed
+            const originalFilenames = imageFiles.map(f => f.originalname).join(', ');
+            
+            const historyEntry = {
+              id: uuidv4(),
+              type: 'edit',
+              prompt,
+              quality: quality || 'medium',
+              size: size || '1024x1024',
+              originalFilenames,
+              imageUrl: null, // No URL on failure
+              status: 'failed',
+              error: error.response?.data?.error?.message || '图像编辑失败: ' + error.message,
+              timestamp: new Date().toISOString(),
+              // userId: req.user ? req.user.id : getClientIP(req)
+            };
+            
+            db.data.history = db.data.history || [];
+            db.data.history.unshift(historyEntry);
+            await db.write();
+            console.log('图片编辑失败历史记录已保存');
+          } catch (dbError) {
+            console.error('保存编辑失败历史记录时出错:', dbError);
+          }
+       } else {
+           console.warn('Database not available, edit error history not saved.');
+       }
+      // ---- End: Add edit error to history ----
       
       // 尝试删除所有临时文件
       if (req.files && req.files.length > 0) {
@@ -331,6 +505,23 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// 获取历史记录API
+app.get('/api/history', async (req, res) => {
+  console.log('收到获取历史记录请求');
+   if (!db) { // Check if db is initialized
+       return res.status(500).json({ error: { message: 'Database not initialized.' } });
+   }
+  try {
+    // Read data from the database
+    await db.read(); // Ensure data is fresh (optional depending on strategy)
+    const history = db.data.history || [];
+    res.json({ history }); 
+  } catch (error) {
+    console.error('获取历史记录失败:', error);
+    res.status(500).json({ error: { message: '获取历史记录失败: ' + error.message } });
+  }
+});
+
 // 处理SPA路由
 app.get('*', (req, res) => {
   // 只处理非API请求的路由
@@ -352,13 +543,20 @@ app.get('*', (req, res) => {
 // 导出 app 而不是直接启动服务器
 module.exports = app;
 
-// 启动服务器
-app.listen(port, () => {
-  console.log(`服务器运行在端口 ${port}`);
-  console.log('环境变量:', {
-    NODE_ENV: process.env.NODE_ENV,
-    PORT: process.env.PORT,
-    VITE_OPENAI_API_KEY: process.env.VITE_OPENAI_API_KEY ? '已设置' : '未设置',
-    VITE_OPENAI_BASE_URL: process.env.VITE_OPENAI_BASE_URL || 'https://api.maynor1024.live/v1'
+// --- Start: Asynchronous Server Startup ---
+async function startServer() {
+  await setupDatabase(); // Wait for DB setup to complete (or fail)
+  
+  app.listen(port, () => {
+    console.log(`服务器运行在端口 ${port}`);
+    console.log('环境变量:', {
+      NODE_ENV: process.env.NODE_ENV,
+      PORT: process.env.PORT,
+      VITE_OPENAI_API_KEY: process.env.VITE_OPENAI_API_KEY ? '已设置' : '未设置',
+      VITE_OPENAI_BASE_URL: process.env.VITE_OPENAI_BASE_URL || 'https://api.maynor1024.live/v1'
+    });
   });
-}); 
+}
+
+startServer(); // Call the async function to start the server
+// --- End: Asynchronous Server Startup --- 

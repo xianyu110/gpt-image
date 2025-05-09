@@ -8,11 +8,25 @@
         </label>
         <textarea
           id="prompt"
-          class="form-control"
+          class="form-control prompt-textarea"
           placeholder="例如：一只可爱的小猫咪坐在窗台上，阳光照射，背景是蓝天"
           v-model="prompt"
-          rows="3"
+          rows="4"
         ></textarea>
+      </div>
+      
+      <!-- Quick Play Modes -->
+      <div class="play-modes">
+         <h4 class="play-modes-label">快速玩法选择:</h4>
+         <div class="play-mode-buttons">
+            <button class="play-mode-button" @click="applyPlayMode('realistic')"><span>🧑</span> 真人绘制</button>
+            <button class="play-mode-button" @click="applyPlayMode('multiObject')"><span>🧩</span> 生成多个对象</button>
+            <button class="play-mode-button" @click="applyPlayMode('comicStrip')"><span>📖</span> 连环画制作</button>
+            <button class="play-mode-button" @click="applyPlayMode('poster')"><span>🎓</span> 制作海报 (教育)</button>
+            <button class="play-mode-button" @click="applyPlayMode('researchArt')"><span>🔬</span> 制作科研图</button>
+            <button class="play-mode-button" @click="applyPlayMode('iphoneSelfie')"><span>🤳</span> iPhone自拍</button>
+            <!-- Add more modes if needed -->
+         </div>
       </div>
       
       <div class="form-controls">
@@ -21,7 +35,7 @@
             <label for="quality" class="small-label">画面质量</label>
             <select id="quality" class="form-control select-control" v-model="imageQuality">
               <option value="low">低质量</option>
-              <option value="medium">中等质量</option>
+              <option value="medium" selected>中等质量</option>
               <option value="high">高质量</option>
             </select>
           </div>
@@ -29,10 +43,23 @@
           <div class="form-group select-group">
             <label for="size" class="small-label">图片尺寸</label>
             <select id="size" class="form-control select-control" v-model="imageSize">
-              <option value="1024x1024">正方形</option>
+              <option value="1024x1024" selected>正方形</option>
               <option value="1024x1536">竖向</option>
               <option value="1536x1024">横向</option>
             </select>
+          </div>
+
+          <!-- Quantity Input -->
+          <div class="form-group select-group">
+            <label for="quantity" class="small-label">生成数量</label>
+            <input 
+              type="number" 
+              id="quantity" 
+              class="form-control number-input" 
+              v-model.number="imageQuantityN" 
+              min="1" 
+              max="4"  
+            />
           </div>
         </div>
         
@@ -58,28 +85,34 @@
       </div>
     </div>
     
-    <div class="result-container" v-if="generatedImage">
-      <div class="result-card">
-        <img 
-          :src="generatedImage" 
-          alt="Generated" 
-          class="image-preview"
-        />
-        <div class="action-buttons">
-          <button class="btn btn-icon" @click="viewOriginalImage" title="查看原图">
-            <span>🔍</span>
-          </button>
-          <button class="btn btn-icon" @click="downloadImage" title="下载图片">
-            <span>💾</span>
-          </button>
-        </div>
+    <div class="result-container" v-if="generatedImages.length > 0">
+      <p>生成结果 ({{ generatedImages.length }} 张):</p>
+      <div class="result-grid">
+         <div v-for="(image, index) in generatedImages" :key="index" class="result-card">
+            <div class="result-image-container">
+              <img 
+                :src="image.url" 
+                alt="Generated Image" 
+                class="image-preview"
+              />
+            </div>
+             <div class="action-buttons">
+                <button class="btn btn-icon" @click="viewOriginalImage(image.url)" title="查看原图">🔍</button>
+                <button class="btn btn-icon" @click="downloadImage(image.url, index)" title="下载图片">💾</button>
+            </div>
+            <!-- Optional: Display revised prompt if available -->
+            <div class="revised-prompt" v-if="image.revised_prompt">
+                 <span title="Revised Prompt">💡</span> {{ image.revised_prompt }}
+            </div>
+         </div>
       </div>
-      <div class="prompt-display" v-if="prompt">
-        <div class="prompt-content">
-          <span class="prompt-icon">💬</span>
-          <p>{{ prompt }}</p>
-        </div>
-      </div>
+       <!-- Display original prompt below the grid -->
+       <div class="prompt-display" v-if="prompt">
+         <div class="prompt-content">
+           <span class="prompt-icon">💬</span>
+           <p>{{ prompt }}</p>
+         </div>
+       </div>
     </div>
   </div>
 </template>
@@ -100,7 +133,8 @@ export default {
       prompt: '',
       imageQuality: 'medium',
       imageSize: '1024x1024',
-      generatedImage: null,
+      imageQuantityN: 1,
+      generatedImages: [],
       isGenerating: false,
       error: '',
       statusMessage: ''
@@ -122,27 +156,62 @@ export default {
         this.error = '无法连接到API服务器，请确保服务器已启动';
       }
     },
+    applyPlayMode(mode) {
+        let template = '';
+        switch (mode) {
+            case 'realistic':
+              template = '写实照片风格，描绘 [主体]，[细节描述]。Realistic photo style depicting [subject], [detailed description].';
+              break;
+            case 'multiObject':
+              template = '生成10-20个不同的 [对象类型]，例如 [示例1], [示例2], [示例3]。Generate 10-20 distinct [object type], such as [example 1], [example 2], [example 3].';
+              break;
+            case 'comicStrip':
+              template = '创建一个包含4个画面的连环画，讲述关于 [故事主题] 的故事。画面风格：[风格描述]。Create a 4-panel comic strip about [story theme]. Art style: [style description].\nPanel 1: [描述]\nPanel 2: [描述]\nPanel 3: [描述]\nPanel 4: [描述]';
+              break;
+            case 'poster':
+              template = '为 [活动/课程名称] 设计一张教育海报，主要内容是 [核心信息]，面向 [目标受众]。风格要求：[风格描述]。Design an educational poster for [event/course name] about [core message], targeting [audience]. Style requirements: [style description].';
+              break;
+            case 'researchArt':
+              template = '为科研论文制作插图，类型：[图表类型：封面摘要图/ppt插图/技术路线图]，主题：[研究主题]，关键元素：[元素1], [元素2]。Create a scientific illustration for a research paper. Type: [figure type: cover/ppt/roadmap], Topic: [research topic], Key elements: [element 1], [element 2].';
+              break;
+            case 'iphoneSelfie':
+              template = '请画一张极其平凡无奇的iPhone自拍照，没有明确的主体或构图感，就像是随手一拍的快照。照片略带运动模糊，阳光或店内灯光不均导致轻微曝光过度。角度尴尬、构图混乱，整体呈现出一种刻意的平庸感，就像是从口袋里拿手机时不小心拍到的一张自拍。主角是_____，背景是_____。';
+              break;
+            default:
+              template = '';
+        }
+        // Replace the current prompt or append, depending on desired behavior.
+        // Currently, it replaces the prompt.
+        this.prompt = template;
+     },
     async generateImage() {
       if (!this.prompt) {
         this.error = '请输入提示词';
         return;
       }
+      if (this.imageQuantityN < 1 || this.imageQuantityN > 4) {
+         this.error = '生成数量必须在 1 到 4 之间';
+         return;
+      }
 
       this.error = '';
+      this.generatedImages = [];
       this.statusMessage = '正在连接服务器...';
       this.isGenerating = true;
       
       try {
+        const requestData = {
+          prompt: this.prompt,
+          quality: this.imageQuality,
+          size: this.imageSize,
+          n: this.imageQuantityN
+        };
         console.log('发送图像生成请求:', {
           endpoint: `${this.apiEndpoint}/images/generations`,
-          data: {
-            prompt: this.prompt,
-            quality: this.imageQuality,
-            size: this.imageSize
-          }
+          data: requestData
         });
         
-        this.statusMessage = '正在生成图像，这可能需要一点时间...';
+        this.statusMessage = `正在生成 ${this.imageQuantityN} 张图像，请稍候...`;
         
         const response = await axios({
           method: 'post',
@@ -150,24 +219,22 @@ export default {
           headers: {
             'Content-Type': 'application/json'
           },
-          data: {
-            prompt: this.prompt,
-            quality: this.imageQuality,
-            size: this.imageSize
-          }
+          data: requestData
         });
         
         console.log('图像生成响应:', response);
         
-        if (response.data && response.data.data && response.data.data[0] && response.data.data[0].url) {
-          this.generatedImage = response.data.data[0].url;
+        if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
+          this.generatedImages = response.data.data;
           this.statusMessage = '';
+          console.log(`成功生成 ${this.generatedImages.length} 张图片`);
         } else {
-          throw new Error('响应数据格式不正确');
+           console.error('响应数据格式不正确或未返回图片数组', response.data);
+           throw new Error('响应数据格式不正确');
         }
       } catch (error) {
         console.error('生成图片错误:', error);
-        
+        this.generatedImages = [];
         if (error.response) {
           console.error('错误响应:', error.response.data);
           this.error = error.response.data?.error?.message || `请求失败 (${error.response.status})`;
@@ -182,16 +249,16 @@ export default {
         this.statusMessage = '';
       }
     },
-    viewOriginalImage() {
-      if (this.generatedImage) {
-        window.open(this.generatedImage, '_blank');
+    viewOriginalImage(url) {
+      if (url) {
+        window.open(url, '_blank');
       }
     },
-    downloadImage() {
-      if (this.generatedImage) {
+    downloadImage(url, index) {
+      if (url) {
         const link = document.createElement('a');
-        link.href = this.generatedImage;
-        link.download = `ai-image-${new Date().getTime()}.png`;
+        link.href = url;
+        link.download = `ai-image-${new Date().getTime()}-${index + 1}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -294,53 +361,81 @@ label {
   margin-top: 2rem;
 }
 
+.result-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+    margin-bottom: 1.5rem;
+}
+
 .result-card {
-  position: relative;
-  background: white;
-  border-radius: 12px;
-  padding: 1rem;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-  overflow: hidden;
+    position: relative;
+    background: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+}
+
+.result-image-container {
+    width: 100%;
+    padding-top: 100%;
+    position: relative;
+    background-color: var(--input-bg);
 }
 
 .image-preview {
-  width: 100%;
-  height: auto;
-  max-height: 600px;
-  object-fit: contain;
-  border-radius: 8px;
-  display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
 }
 
-.action-buttons {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  display: flex;
-  gap: 0.5rem;
+.result-card .action-buttons {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 0.5rem;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 0.3rem 0.5rem;
+    border-radius: 6px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
-.btn-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: rgba(255, 255, 255, 0.9);
-  border-radius: 50%;
-  font-size: 1.2rem;
-  padding: 0;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  transition: all 0.2s;
+.result-card:hover .action-buttons {
+    opacity: 1;
 }
 
-.btn-icon:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+.action-buttons .btn-icon span {
+    color: white;
+    font-size: 1.1rem; 
+    display: block;
+    line-height: 1;
+}
+
+.revised-prompt {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background-color: var(--input-bg);
+    border-top: 1px solid var(--border-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.revised-prompt span {
+    font-style: italic;
+    margin-right: 0.3em;
 }
 
 .prompt-display {
-  margin-top: 1rem;
+  margin-top: 0;
 }
 
 .prompt-content {
@@ -390,5 +485,61 @@ label {
   .select-group {
     width: 100%;
   }
+}
+
+/* Play Modes Styles */
+.play-modes {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: var(--input-bg);
+  border-radius: 8px;
+}
+
+.play-modes-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.8rem;
+}
+
+.play-mode-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.play-mode-button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-color);
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.play-mode-button:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background-color: rgba(var(--primary-color-rgb, 108, 92, 231), 0.05); /* Need theme RGB */
+  transform: translateY(-1px);
+}
+
+.play-mode-button span {
+   font-size: 1rem;
+}
+
+.prompt-textarea {
+    min-height: 100px; /* Slightly larger default height */
+    margin-bottom: 1rem; /* Space below textarea */
+}
+
+.number-input {
+  width: 80px;
+  text-align: center;
 }
 </style>
