@@ -25,27 +25,37 @@
       </button>
        <button 
         class="tab-button" 
-        :class="{ active: activeSecondaryTab === 'billing' }" 
-        @click="activeSecondaryTab = 'billing'"
-        disabled
+        :class="{ active: activeSecondaryTab === 'subscription' }" 
+        @click="activeSecondaryTab = 'subscription'"
       >
-         <span class="tab-icon">💰</span> 消费记录
+         <span class="tab-icon">💰</span> 订阅套餐
       </button>
     </div>
 
     <!-- Content Area -->
     <div class="content-area">
       <div v-if="activeSecondaryTab === 'generate'">
-        <ImageGenerator :api-endpoint="apiEndpoint" />
+        <ImageGenerator 
+          :api-endpoint="apiEndpoint" 
+          :user-stats="userStats"
+          @usage-updated="$emit('usage-updated')"
+        />
       </div>
       <div v-else-if="activeSecondaryTab === 'edit'">
-         <ImageEditor :api-endpoint="apiEndpoint" /> 
+         <ImageEditor 
+           :api-endpoint="apiEndpoint" 
+           :user-stats="userStats"
+           @usage-updated="$emit('usage-updated')"
+         /> 
       </div>
       <div v-else-if="activeSecondaryTab === 'history'">
-         <ImageHistory :api-endpoint="apiEndpoint" />
+         <ImageHistory 
+           :api-endpoint="apiEndpoint" 
+           :user-stats="userStats"
+         />
       </div>
-       <div v-else-if="activeSecondaryTab === 'billing'">
-         <p>消费记录功能即将推出。</p> 
+       <div v-else-if="activeSecondaryTab === 'subscription'">
+         <SubscriptionPlans :user-stats="userStats" />
       </div>
     </div>
 
@@ -57,20 +67,27 @@
 import ImageGenerator from './ImageGenerator.vue';
 import ImageEditor from './ImageEditor.vue';
 import ImageHistory from './ImageHistory.vue';
+import SubscriptionPlans from './SubscriptionPlans.vue';
 
 export default {
   name: 'DrawingBoard',
   components: {
     ImageGenerator,
     ImageEditor,
-    ImageHistory
+    ImageHistory,
+    SubscriptionPlans
   },
   props: {
     apiEndpoint: {
       type: String,
       default: '/api'
+    },
+    userStats: {
+      type: Object,
+      default: () => null
     }
   },
+  emits: ['usage-updated'],
   data() {
     return {
       activeSecondaryTab: 'generate', // Default to generate tab

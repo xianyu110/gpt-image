@@ -126,8 +126,13 @@ export default {
     apiEndpoint: {
       type: String,
       default: '/api'
+    },
+    userStats: {
+      type: Object,
+      default: () => null
     }
   },
+  emits: ['usage-updated'],
   data() {
     return {
       prompt: '',
@@ -228,6 +233,9 @@ export default {
           this.generatedImages = response.data.data;
           this.statusMessage = '';
           console.log(`成功生成 ${this.generatedImages.length} 张图片`);
+          
+          // 发出事件通知使用次数更新
+          this.$emit('usage-updated');
         } else {
            console.error('响应数据格式不正确或未返回图片数组', response.data);
            throw new Error('响应数据格式不正确');

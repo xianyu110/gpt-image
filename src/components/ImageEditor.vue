@@ -333,6 +333,7 @@ export default {
           url: `${this.apiEndpoint}/images/edits`,
           headers: {
             // Content-Type is set automatically for FormData
+            'user-id': localStorage.getItem('userId') || ''
           },
           data: formData
         });

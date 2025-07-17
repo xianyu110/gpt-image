@@ -1,50 +1,93 @@
 <template>
   <div class="app-container" :class="selectedTheme">
-    <header class="header">
-      <div class="header-content">
-        <div class="title-wrapper">
-          <h1 class="app-title">智灵-在线生图、改图、合成图</h1>
-          <div class="theme-selector">
-            <button 
-              class="theme-button" 
-              :class="{ active: selectedTheme === 'theme-purple' }"
-              @click="changeTheme('theme-purple')"
-              title="紫色主题"
-            >
-              <span class="color-circle purple"></span>
-            </button>
-            <button 
-              class="theme-button" 
-              :class="{ active: selectedTheme === 'theme-blue' }"
-              @click="changeTheme('theme-blue')"
-              title="蓝色主题"
-            >
-              <span class="color-circle blue"></span>
-            </button>
-            <button 
-              class="theme-button" 
-              :class="{ active: selectedTheme === 'theme-dark' }"
-              @click="changeTheme('theme-dark')"
-              title="暗黑主题"
-            >
-              <span class="color-circle dark"></span>
-            </button>
-            <button 
-              class="theme-button" 
-              :class="{ active: selectedTheme === 'theme-gradient' }"
-              @click="changeTheme('theme-gradient')"
-              title="渐变主题"
-            >
-              <span class="color-circle gradient"></span>
-            </button>
+    <!-- 显示认证界面 -->
+    <AuthWrapper 
+      v-if="!isAuthenticated"
+      @auth-success="handleAuthSuccess"
+    />
+    
+    <!-- 显示主应用 -->
+    <template v-else>
+      <header class="header">
+        <div class="header-content">
+          <div class="title-wrapper">
+            <h1 class="app-title">智灵-在线生图、改图、合成图</h1>
+            <div class="theme-selector">
+              <button 
+                class="theme-button" 
+                :class="{ active: selectedTheme === 'theme-purple' }"
+                @click="changeTheme('theme-purple')"
+                title="紫色主题"
+              >
+                <span class="color-circle purple"></span>
+              </button>
+              <button 
+                class="theme-button" 
+                :class="{ active: selectedTheme === 'theme-blue' }"
+                @click="changeTheme('theme-blue')"
+                title="蓝色主题"
+              >
+                <span class="color-circle blue"></span>
+              </button>
+              <button 
+                class="theme-button" 
+                :class="{ active: selectedTheme === 'theme-dark' }"
+                @click="changeTheme('theme-dark')"
+                title="暗黑主题"
+              >
+                <span class="color-circle dark"></span>
+              </button>
+              <button 
+                class="theme-button" 
+                :class="{ active: selectedTheme === 'theme-gradient' }"
+                @click="changeTheme('theme-gradient')"
+                title="渐变主题"
+              >
+                <span class="color-circle gradient"></span>
+              </button>
+            </div>
+          </div>
+          
+          <!-- 用户信息区域 -->
+          <div class="user-info">
+            <div class="user-avatar">
+              <img 
+                v-if="currentUser?.avatar" 
+                :src="currentUser.avatar" 
+                :alt="currentUser.username"
+              >
+              <span v-else class="avatar-placeholder">
+                {{ currentUser?.username?.charAt(0).toUpperCase() }}
+              </span>
+            </div>
+            <div class="user-details">
+              <span class="username">{{ currentUser?.username }}</span>
+              <span class="user-status">
+                {{ userStats?.subscription?.hasActiveSubscription ? userStats.subscription.planName : '免费用户' }}
+              </span>
+            </div>
+            <div class="user-actions">
+              <button @click="showUserMenu = !showUserMenu" class="user-menu-btn">
+                <span class="menu-icon">⋮</span>
+              </button>
+              <div v-if="showUserMenu" class="user-menu">
+                <button @click="showProfile = true">个人设置</button>
+                <button @click="showUsageStats = true">使用统计</button>
+                <button @click="handleLogout">退出登录</button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </header>
-    
-    <main class="main-content">
-      <router-view :api-endpoint="apiEndpoint"></router-view>
-    </main>
+      </header>
+      
+      <main class="main-content">
+        <router-view 
+          :api-endpoint="apiEndpoint"
+          :user-stats="userStats"
+          @usage-updated="refreshUserStats"
+        ></router-view>
+      </main>
+    </template>
     
     <footer class="footer">
       <p>智灵绘图 © {{ new Date().getFullYear() }}</p>
@@ -53,24 +96,84 @@
 </template>
 
 <script>
+import AuthWrapper from './components/AuthWrapper.vue';
+import userService from './services/userService.js';
+
 export default {
   name: 'App',
+  components: {
+    AuthWrapper
+  },
   data() {
     return {
       apiEndpoint: '/api',
-      selectedTheme: 'theme-purple'
+      selectedTheme: 'theme-purple',
+      isAuthenticated: false,
+      currentUser: null,
+      userStats: null,
+      showUserMenu: false,
+      showProfile: false,
+      showUsageStats: false
     }
   },
-  created() {
+  async created() {
     const savedTheme = localStorage.getItem('selectedTheme');
     if (savedTheme) {
       this.selectedTheme = savedTheme;
     }
+    
+    await this.checkAuthStatus();
   },
   methods: {
+    // 主题相关方法
     changeTheme(theme) {
       this.selectedTheme = theme;
       localStorage.setItem('selectedTheme', theme);
+    },
+    
+    // 认证相关方法
+    async checkAuthStatus() {
+      try {
+        if (userService.isLoggedIn()) {
+          this.isAuthenticated = true;
+          this.currentUser = userService.getUser();
+          await this.refreshUserStats();
+        }
+      } catch (error) {
+        console.error('检查认证状态失败:', error);
+        this.isAuthenticated = false;
+      }
+    },
+    
+    async handleAuthSuccess(user) {
+      this.isAuthenticated = true;
+      this.currentUser = user;
+      await this.refreshUserStats();
+    },
+    
+    async handleLogout() {
+      try {
+        await userService.logout();
+        this.isAuthenticated = false;
+        this.currentUser = null;
+        this.userStats = null;
+        this.showUserMenu = false;
+      } catch (error) {
+        console.error('退出登录失败:', error);
+      }
+    },
+    
+    async refreshUserStats() {
+      try {
+        if (this.isAuthenticated) {
+          this.userStats = await userService.getCurrentUser();
+        }
+      } catch (error) {
+        console.error('刷新用户统计失败:', error);
+        if (error.response?.status === 401) {
+          this.handleLogout();
+        }
+      }
     }
   }
 }
@@ -190,13 +293,15 @@ body {
   width: 90%;
   max-width: 1200px;
   margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .title-wrapper {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.2rem;
+  gap: 20px;
 }
 
 .app-title {
@@ -345,6 +450,104 @@ body {
 
 .btn-primary:active {
   transform: translateY(0);
+}
+
+/* 用户信息区域样式 */
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  color: white;
+}
+
+.username {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.user-status {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.user-actions {
+  position: relative;
+}
+
+.user-menu-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.user-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.user-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  min-width: 120px;
+  z-index: 1000;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.user-menu button {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-color);
+  transition: background-color 0.2s ease;
+}
+
+.user-menu button:hover {
+  background: #f8f9fa;
 }
 
 @media (max-width: 768px) {
